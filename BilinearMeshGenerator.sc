@@ -68,6 +68,7 @@ public class MeshGenerator : MonoBehaviour
         // index for vertices represeting tris
         int tris = 0;
 
+        // assign vertices to tris, please check https://www.youtube.com/watch?v=eJEpeUH1EMg, https://www.youtube.com/watch?v=64NblGkAabk&t=1s
         for (int z = 0; z < zSize; z++)
         {
             for (int x = 0; x < xSize; x++)
@@ -93,10 +94,11 @@ public class MeshGenerator : MonoBehaviour
 
         mesh.vertices = vertices;
         mesh.triangles = triangles;
-
+        // update normals for rendering 
         mesh.RecalculateNormals();
     }
 
+    // show vertices in scene editor
     void OnDrawGizmos()
     {
         for(int i = 0; i < vertices.Length; i ++)
