@@ -106,19 +106,20 @@ public class HalfedgeMesh
         }
     }
 
+    // go around a vertex and output incident vertices in the loop
     public int[] iterateVerticesOfFace(Face face)
     {
         int[] outputVertices = new int[3];
         Halfedge currentHalfedge = face.halfedge;
-        for (int i =0; i < 3; i++)
+        for (int i = 0; i < 3; i++)
         {
             outputVertices[i] = vertices.IndexOf(currentHalfedge.startVertex);
-            currentHalfedge = currentHalfedge.next;          
+            currentHalfedge = currentHalfedge.next;
         }
         return outputVertices;
     }
 
-    public Vector3[] GetVertices() 
+    public Vector3[] GetVertices()
     {
         Vector3[] outputVertices = new Vector3[vertices.Count];
         for (int i = 0; i < outputVertices.Length; i++)
@@ -130,17 +131,17 @@ public class HalfedgeMesh
 
     }
 
-    public int[] GetTriangles() 
+    public int[] GetTriangles()
     {
-        int[] outputTriangles = new int[faces.Count *3];
+        int[] outputTriangles = new int[faces.Count * 3];
         for (int i = 0; i < faces.Count; i++)
         {
             int[] tri = iterateVerticesOfFace(faces[i]);
-            outputTriangles[i*3] = tri[0];
-            outputTriangles[i*3+1] = tri[0+1];
-            outputTriangles[i*3+2] = tri[0+2];
+            outputTriangles[i * 3] = tri[0];
+            outputTriangles[i * 3 + 1] = tri[0 + 1];
+            outputTriangles[i * 3 + 2] = tri[0 + 2];
         }
         return outputTriangles;
     }
-    
+
 }
