@@ -1,0 +1,178 @@
+// Each #kernel tells which function to compile; you can have many kernels
+// In HLSL, a function or variable declaration needs to appear before it is used.
+#pragma kernel CSMain
+
+// Create a RenderTexture with enableRandomWrite flag and set it
+// with cs.SetTexture
+RWTexture2D<float4> Result;
+
+float4x4 _CameraToWorld;
+float4x4 _CameraInverseProjection;
+float4 _DirectionalLight;
+float4 _LightColor;
+
+float3 _SpherePosition;
+float _SphereRadius;
+float4 _SphereColor;
+float4 _SphereSpecular;
+float _SphereGlossiness;
+
+// Ray
+struct Ray
+{
+    float3 origin;
+    float3 direction;
+};
+
+Ray CreateRay(float3 origin, float3 direction)
+{
+    Ray ray;
+    ray.origin = origin;
+    ray.direction = direction;
+    return ray;
+}
+
+// Create ray from the viewpoint to each pixel
+Ray CreateCameraRay(float2 uv)
+{
+    float3 origin = mul(_CameraToWorld, float4(0.0f, 0.0f, 0.0f, 1.0f)).xyz;
+    
+    float3 direction = mul(_CameraInverseProjection, float4(uv, 0.0f, 1.0f)).xyz;
+    direction = mul(_CameraToWorld, float4(direction, 0.0f)).xyz;
+    direction = normalize(direction);
+
+    return CreateRay(origin, direction);
+}
+
+// Sphere
+struct Sphere
+{
+    float3 position;
+    float radius;
+    float3 color; 
+    float3 specular; 
+    float glossiness;
+};
+
+Sphere CreateSphere(float3 position, float radius, float3 color, float3 specular, float glossiness)
+{
+    Sphere sphere;
+    sphere.position = position;
+    sphere.radius = radius;
+    sphere.color = color;
+    sphere.specular = specular;
+    sphere.glossiness = glossiness;
+    return sphere;
+}
+
+// Hit
+struct RayHit
+{
+    float3 position;
+    float distance;
+    float3 normal;
+    float3 color; 
+    float3 specular; 
+    float glossiness;
+};
+
+RayHit CreateRayHit()
+{
+    RayHit hit;
+    hit.position = float3(0.0f, 0.0f, 0.0f);
+    hit.distance = 1.#INF;
+    hit.normal = float3(0.0f, 0.0f, 0.0f);
+    hit.color = float3(0.0f, 0.0f, 0.0f);
+    hit.specular = float3(0.0f, 0.0f, 0.0f); 
+    hit.glossiness = 1.0f;
+    return hit;
+}
+
+// check ray-sphere intersection; implicit
+void IntersectSphere(Ray ray, inout RayHit bestHit, Sphere sphere)
+{
+    float3 d = ray.origin - sphere.position;
+    float p1 = -dot(ray.direction, d);
+    float p2sqr = p1 * p1 - dot(d, d) + sphere.radius * sphere.radius;
+    if (p2sqr < 0)
+        return;
+    float p2 = sqrt(p2sqr);
+    float t = p1 - p2 > 0 ? p1 - p2 : p1 + p2;
+    if (t > 0 && t < bestHit.distance)
+    {
+        bestHit.distance = t;
+        bestHit.position = ray.origin + t * ray.direction;
+        bestHit.normal = normalize(bestHit.position - sphere.position);
+        bestHit.color = sphere.color;
+        bestHit.specular = sphere.specular; 
+        bestHit.glossiness = sphere.glossiness;
+    }
+}
+
+// originally trace; find intersection with objects in the scene
+RayHit FindIntersection(Ray ray)
+{
+    Sphere sphere = CreateSphere(_SpherePosition, _SphereRadius, _SphereColor.xyz, _SphereSpecular.xyz, pow(10, _SphereGlossiness));
+    Sphere ground = CreateSphere(float3(0.0f, -100.0f, 0.0f), 100.0f, float3(0.5f, 0.5f, 0.5f), float3(0.5f, 0.5f, 0.5f), 100.0f);
+    RayHit bestHit = CreateRayHit();
+    IntersectSphere(ray, bestHit, sphere);
+    IntersectSphere(ray, bestHit, ground);
+    return bestHit;
+}
+
+//Shade originally; computer the colour of a hitting point 
+float3 GetColor(inout Ray ray, RayHit hit) 
+{
+    float3 v = -ray.direction;
+    float3 n = hit.normal;
+    float3 l = normalize(_DirectionalLight.xyz-hit.position);
+    float3 r = 2*dot(n, l)*n-l;
+
+    float3 lightColor = _LightColor.xyz;
+    float lightIntensity = _DirectionalLight.w;
+
+
+    if (hit.distance < 1.#INF)
+    {
+        //Return the colour using Phong lighting model
+        return
+        // diffuse,
+        saturate(dot(n, l)) * (lightColor * hit.color) * lightIntensity
+        // specular 
+        + saturate(pow(dot(v, r), hit.glossiness) * (lightColor * hit.specular)) * lightIntensity
+        // ambient 
+        + float3(0.1f,0.1f,0.1f) * hit.color
+        // emissive
+        + float3(0, 0, 0);
+    }
+    else
+    {
+        // if hit distance is inf, means hit nothing, we return a constant colour as backgroud/skybox
+        return float3(0.2f, 0.2f, 0.2f);
+    }
+}
+
+// defines the dimensions of a work groud
+[numthreads(8,8,1)]
+void CSMain (uint3 id : SV_DispatchThreadID)
+{
+    // Get the dimensions of the RenderTexture
+    uint width, height;
+    Result.GetDimensions(width, height);
+
+    // Transform pixel to [-1,1] range
+    float2 ij = float2((id.xy + float2(0.5f, 0.5f)) / float2(width, height) * 2.0f - 1.0f);
+
+    // Get a ray for each pixels
+    Ray ray = CreateCameraRay(ij);
+
+    // find intersection
+    RayHit hit = FindIntersection(ray);
+
+    // computer the colour for each hit point
+    float3 result = GetColor(ray, hit);
+
+    // assign the color to the final target
+    Result[id.xy] = float4(result, 1);
+}
+
